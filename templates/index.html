@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Decoy File System Dashboard</title>
+    <!-- Use Bootswatch Darkly for a modern dark UI -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootswatch/4.5.2/darkly/bootstrap.min.css">
+    <!-- Chart.js for graphs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- jsPDF for PDF generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        /* Blinking effect for intrusion alerts */
+        .blinking {
+            animation: blinkingText 1.5s infinite;
+        }
+        @keyframes blinkingText {
+            0% { color: red; }
+            49% { color: red; }
+            50% { color: transparent; }
+            99% { color: transparent; }
+            100% { color: red; }
+        }
+        /* Additional padding for sections */
+        .section {
+            margin-bottom: 2rem;
+        }
+        /* Scrollable container for tables */
+        .scrollable-table {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        /* Scrollable container for decoy file list */
+        .scrollable-decoys {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .scrollable-alerts {
+            max-height: 400px; /* Adjust height as needed */
+            overflow-y: auto;
+            padding: 0.5rem;
+            border: 1px solid #444; /* Optional: for visual separation */
+            margin-top: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <h1 class="mb-4">Decoy File System Dashboard</h1>
+        
+        <!-- Real-Time Activity Monitoring & Intrusion Alerts -->
+        <div class="row section">
+            <div class="col-md-6">
+                <h3>Event Logs</h3>
+                <div class="scrollable-table">
+                    <table class="table table-dark table-striped" id="logsTable">
+                        <thead>
+                            <tr>
+                                <th>Index</th>
+                                <th>Timestamp</th>
+                                <th>Action</th>
+                                <th>File</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Log entries will be injected here dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+                <button id="shareLogs" class="btn btn-info mb-2">Share Logs</button>
+                <button id="downloadPDF" class="btn btn-secondary mb-2">Download PDF Report</button>
+            </div>
+            <div class="col-md-6">
+                <h3>Intrusion Alerts</h3>
+                <div class="scrollable-alerts">
+                     <div id="alerts" class="alert alert-danger" style="display: none;"></div>
+                </div>
+                <button id="lockdownButton" class="btn btn-danger mt-2">Emergency Lockdown</button>
+                <!-- Live Intruder Tracking Section -->
+                <div class="mt-3">
+                    <h4>Live Intruder Tracking</h4>
+                    <div id="intruderInfo" class="alert alert-info" style="display: none;"></div>
+                </div>
+                <button id="notifyButton" class="btn btn-warning mt-2">Send Alert Notification</button>
+            </div>
+        </div>
+        
+        <!-- Graphs & Charts (Intruder Activity Timeline) -->
+        <div class="row section">
+            <div class="col-md-12">
+                <h3>Event Frequency Chart</h3>
+                <canvas id="eventsChart" width="400" height="200"></canvas>
+            </div>
+        </div>
+        
+        <!-- File Interaction Simulator -->
+        <div class="row section">
+            <div class="col-md-12">
+                <h3>File Interaction Simulator</h3>
+                <button id="simulateAttack" class="btn btn-warning">Simulate Ransomware Attack</button>
+            </div>
+        </div>
+        
+        <!-- Decoy File Control Panel -->
+        <div class="row section">
+            <div class="col-md-12">
+                <h3>Decoy File Control Panel</h3>
+                <div class="scrollable-decoys">
+                    <table class="table table-dark table-striped" id="decoysTable">
+                        <thead>
+                            <tr>
+                                <th>Decoy File Name</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Decoy file list will be injected here -->
+                        </tbody>
+                    </table>
+                </div>
+                <button id="refreshDecoys" class="btn btn-primary mt-2">Refresh Decoy Files</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- jQuery (required for Bootstrap's JavaScript plugins) -->
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js"></script>
+    
+    <script>
+        let chart;  // Global variable for Chart.js instance
+
+        // Fetch logs from the backend API
+        function fetchLogs() {
+            fetch('/api/logs')
+                .then(response => response.json())
+                .then(data => {
+                    const tableBody = document.querySelector('#logsTable tbody');
+                    tableBody.innerHTML = '';
+                    let eventCounts = {};
+                    let alerts = [];
+                    
+                    data.forEach((block) => {
+                        const row = document.createElement('tr');
+                        const date = new Date(block.timestamp * 1000);
+                        const timeStr = date.toLocaleString();
+                        const action = block.event_data ? block.event_data.action : 'N/A';
+                        const file = block.event_data ? block.event_data.file : 'N/A';
+                        
+                        row.innerHTML = `
+                            <td>${block.index}</td>
+                            <td>${timeStr}</td>
+                            <td>${action}</td>
+                            <td>${file}</td>
+                        `;
+                        
+                        // Highlight rows with anomalous or simulated attack events
+                        if (action === "ANOMALOUS_ACTIVITY" || action === "SIMULATED_ATTACK") {
+                            row.classList.add('blinking');
+                            alerts.push(`Alert: ${action} on ${file}`);
+                        }
+                        
+                        tableBody.appendChild(row);
+                        
+                        // Group events for chart by hour:minute
+                        if (block.event_data) {
+                            const timeKey = date.getHours() + ':' + date.getMinutes();
+                            eventCounts[timeKey] = (eventCounts[timeKey] || 0) + 1;
+                        }
+                    });
+                    updateChart(eventCounts);
+                    updateAlerts(alerts);
+                })
+                .catch(error => console.error('Error fetching logs:', error));
+        }
+        
+        // Update or create the Chart.js bar chart for event frequency
+        function updateChart(data) {
+            const labels = Object.keys(data);
+            const counts = Object.values(data);
+            const ctx = document.getElementById('eventsChart').getContext('2d');
+            
+            if (chart) {
+                chart.data.labels = labels;
+                chart.data.datasets[0].data = counts;
+                chart.update();
+            } else {
+                chart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Events per Minute',
+                            data: counts,
+                            backgroundColor: 'rgba(255, 99, 132, 0.6)',
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        scales: {
+                            yAxes: [{
+                                ticks: {
+                                    beginAtZero: true,
+                                    precision: 0
+                                }
+                            }]
+                        }
+                    }
+                });
+            }
+        }
+        
+        // Update the Intrusion Alerts panel
+        function updateAlerts(alerts) {
+            const alertsDiv = document.getElementById('alerts');
+            if (alerts.length > 0) {
+                alertsDiv.style.display = 'block';
+                alertsDiv.innerHTML = alerts.join('<br>');
+            } else {
+                alertsDiv.style.display = 'none';
+            }
+        }
+        
+        // Fetch decoy file names from the backend
+        function fetchDecoys() {
+            fetch('/api/decoys')
+                .then(response => response.json())
+                .then(files => {
+                    const decoysTable = document.querySelector('#decoysTable tbody');
+                    decoysTable.innerHTML = '';
+                    files.forEach(file => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `<td>${file}</td>`;
+                        decoysTable.appendChild(row);
+                    });
+                })
+                .catch(error => console.error('Error fetching decoy files:', error));
+        }
+        
+        // Handle simulation of a ransomware attack via the simulator button
+        document.getElementById('simulateAttack').addEventListener('click', function() {
+            fetch('/api/simulate', { method: 'POST' })
+                .then(response => response.json())
+                .then(simEvent => {
+                    alert('Simulated ransomware attack triggered!');
+                    // Refresh logs to display the simulated event
+                    fetchLogs();
+                })
+                .catch(error => console.error('Error simulating attack:', error));
+        });
+        
+        // Refresh the decoy file list on button click
+        document.getElementById('refreshDecoys').addEventListener('click', function() {
+            fetchDecoys();
+        });
+        
+        // Poll endpoints periodically to keep the dashboard updated
+        setInterval(fetchLogs, 5000);
+        setInterval(fetchDecoys, 10000);
+        // Initial data fetch
+        fetchLogs();
+        fetchDecoys();
+
+        // Share logs functionality: Copy the table data to clipboard as a formatted report
+        document.getElementById('shareLogs').addEventListener('click', function() {
+            let table = document.getElementById('logsTable');
+            let textToCopy = 'Index\tTimestamp\tAction\tFile\n';
+    
+            // Loop through each row of the table and concatenate cell values
+            for (let row of table.rows) {
+                let cells = Array.from(row.cells).map(cell => cell.textContent.trim());
+                textToCopy += cells.join('\t') + "\n";
+            }
+    
+            // Use the Clipboard API to copy the formatted text
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                alert('Logs copied to clipboard!');
+            }).catch(err => {
+                console.error('Error copying logs: ', err);
+            });
+        });
+
+        // Download PDF functionality using jsPDF
+        document.getElementById('downloadPDF').addEventListener('click', function() {
+            const { jsPDF } = window.jspdf;
+            let doc = new jsPDF();
+            let text = "Event Logs Report\n\n";
+            let table = document.getElementById('logsTable');
+            for (let row of table.rows) {
+                let cells = Array.from(row.cells).map(cell => cell.textContent.trim());
+                text += cells.join(' | ') + "\n";
+            }
+            doc.text(text, 10, 10);
+            doc.save('Event_Logs_Report.pdf');
+        });
+
+        // Live Intruder Tracking: Fetch IP & geolocation
+        function fetchIntruderTracking() {
+            fetch('https://ipinfo.io/json?token=<YOUR_TOKEN_HERE>') // Replace <YOUR_TOKEN_HERE> with your actual token if required
+                .then(response => response.json())
+                .then(data => {
+                    const intruderDiv = document.getElementById('intruderInfo');
+                    intruderDiv.style.display = 'block';
+                    intruderDiv.innerHTML = `IP: ${data.ip}<br>Location: ${data.city}, ${data.region}, ${data.country}`;
+                })
+                .catch(error => {
+                    console.error('Error fetching intruder tracking:', error);
+                });
+        }
+        // Call the function once to load intruder info
+        fetchIntruderTracking();
+
+        // Emergency Lockdown functionality
+        document.getElementById('lockdownButton').addEventListener('click', function() {
+            alert('Emergency Lockdown Activated! All unauthorized access will be blocked.');
+        });
+
+        // Smart Notification System: Simulate sending alert notifications
+        document.getElementById('notifyButton').addEventListener('click', function() {
+            fetch('/api/notify', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    alert('Notification sent: ' + data.message);
+                })
+                .catch(error => console.error('Error sending notification:', error));
+        });
+    </script>
+</body>
+</html>
